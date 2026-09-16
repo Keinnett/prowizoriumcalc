@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Pre-procesor Planowania Hodowli Lasu</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Warstwa 1: Parametry wyjściowe i wyłączenia -->
+  <div class="card">
+    <h2>1. Powierzchnia manipulacyjna i wyłączenia</h2>
+    <div class="grid-3">
+      <div>
+        <label>Rębnia</label>
+        <select id="rebnia" onchange="calcAll()">
+          <option value="IIIA">IIIA (Gniazdowa zupełna)</option>
+          <option value="IB">IB (Zupełna pasowa)</option>
+        </select>
+      </div>
+      <div>
+        <label>Pow. manipulacyjna brutto [ha]</label>
+        <input type="number" id="pow-brutto" step="0.01" value="5.57" oninput="calcAll()">
+      </div>
+      <div>
+        <label>Wyłączenia (ekoton, kępy PNSW, drogi) [ha]</label>
+        <input type="number" id="pow-wylaczenia" step="0.01" value="0.00" oninput="calcAll()">
+      </div>
+    </div>
+  </div>
+
+  <!-- Warstwa 2: Rozbicie odnowienia na gatunki -->
+  <div class="card">
+    <h2>2. Odnowienie sztuczne (Więźba i Sadzonki)</h2>
+    
+    <div class="grid-row">
+      <div>
+        <label>Gatunek</label>
+        <input type="text" value="Db.s" readonly>
+      </div>
+      <div>
+        <label>Pow. [ha]</label>
+        <input type="number" id="pow-db" step="0.01" value="0.58" oninput="calcAll()">
+      </div>
+      <div>
+        <label>Więźba [m] (np. 1.5 × 0.83)</label>
+        <div style="display:flex; gap:4px;">
+          <input type="number" id="wx-db" step="0.01" value="1.50" oninput="calcAll()">
+          <input type="number" id="wy-db" step="0.01" value="0.83" oninput="calcAll()">
+        </div>
+      </div>
+      <div>
+        <label>Sadzonki [tszt]</label>
+        <span class="tooltip-val" id="tooltip-db" data-tooltip="...">
+          <input type="text" id="tszt-db" readonly style="color:var(--accent); font-weight:bold;">
+        </span>
+      </div>
+      <div>
+        <label>Grodzenie</label>
+        <input type="checkbox" id="grodz-db" checked onchange="calcAll()" style="width:20px; height:20px;">
+      </div>
+    </div>
+
+    <div class="grid-row">
+      <div>
+        <input type="text" value="Bk" readonly>
+      </div>
+      <div>
+        <input type="number" id="pow-bk" step="0.01" value="1.09" oninput="calcAll()">
+      </div>
+      <div>
+        <div style="display:flex; gap:4px;">
+          <input type="number" id="wx-bk" step="0.01" value="1.50" oninput="calcAll()">
+          <input type="number" id="wy-bk" step="0.01" value="0.83" oninput="calcAll()">
+        </div>
+      </div>
+      <div>
+        <span class="tooltip-val" id="tooltip-bk" data-tooltip="...">
+          <input type="text" id="tszt-bk" readonly style="color:var(--accent); font-weight:bold;">
+        </span>
+      </div>
+      <div>
+        <input type="checkbox" id="grodz-bk" onchange="calcAll()" style="width:20px; height:20px;">
+      </div>
+    </div>
+
+    <div class="summary-box">
+      <div>
+        Suma pow. zredukowanej: <strong id="suma-zred">0.00</strong> ha 
+        (Brutto po wyłączeniach: <span id="netto-baza">0.00</span> ha)
+      </div>
+      <div id="status-walidacji" class="ok">Bilanse zgodne</div>
+    </div>
+  </div>
+
+  <!-- Warstwa 3: Szybkie wklejki pod SILP -->
+  <div class="card">
+    <h2>3. Pozycje do SILP (Kliknij, aby skopiować)</h2>
+    <div class="grid-3">
+      <button class="btn-copy" onclick="copyValue(this, 'val-odn')">
+        Pow. zredukowana: <span id="val-odn">0.00</span> ha
+      </button>
+      <button class="btn-copy" onclick="copyValue(this, 'val-tszt')">
+        Sadzonki łącznie: <span id="val-tszt">0.00</span> tszt
+      </button>
+      <button class="btn-copy" onclick="copyValue(this, 'val-grodz')">
+        Grodzenie: <span id="val-grodz">0.00</span> ha
+      </button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

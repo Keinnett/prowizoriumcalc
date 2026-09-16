@@ -1,0 +1,123 @@
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --border: #334155;
+  --accent: #22c55e;
+  --accent-blue: #3b82f6;
+  --error: #ef4444;
+  --text: #f8fafc;
+  --text-dim: #94a3b8;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  max-width: 850px;
+  margin: 30px auto;
+  padding: 0 16px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.grid-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1.4fr 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+input, select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  background: #0b0f19;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.summary-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #0b0f19;
+  border: 1px solid var(--border);
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 12px;
+  font-size: 0.9rem;
+}
+
+.btn-copy {
+  background: var(--accent-blue);
+  border: none;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+}
+
+.btn-copy.copied {
+  background: var(--accent);
+}
+
+.alert { color: var(--error); font-weight: bold; }
+.ok { color: var(--accent); font-weight: bold; }
+
+/* Tooltipy w czystym CSS */
+.tooltip-val {
+  position: relative;
+  cursor: help;
+  border-bottom: 1px dotted var(--text-dim);
+  display: inline-block;
+}
+
+.tooltip-val:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #020617;
+  color: #f1f5f9;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  z-index: 10;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+}
