@@ -1,76 +1,657 @@
-function calcAll() {
-  const pBrutto = parseFloat(document.getElementById('pow-brutto').value) || 0;
-  const pWyl = parseFloat(document.getElementById('pow-wylaczenia').value) || 0;
-  const rebnia = document.getElementById('rebnia').value;
-
-  const nettoBaza = Math.max(0, pBrutto - pWyl);
-  document.getElementById('netto-baza').innerText = nettoBaza.toFixed(2);
-
-  // Gatunek 1: Dąb
-  const pDb = parseFloat(document.getElementById('pow-db').value) || 0;
-  const wxDb = parseFloat(document.getElementById('wx-db').value) || 1;
-  const wyDb = parseFloat(document.getElementById('wy-db').value) || 1;
-  const obsadaDb = 10000 / (wxDb * wyDb);
-  const tsztDb = (pDb * obsadaDb) / 1000;
-  document.getElementById('tszt-db').value = tsztDb.toFixed(2);
-  document.getElementById('tooltip-db').setAttribute(
-    'data-tooltip', 
-    `Wzór: ${pDb.toFixed(2)} ha × [10 000 / (${wxDb} × ${wyDb})] = ${Math.round(tsztDb * 1000)} szt.`
-  );
-
-  // Gatunek 2: Buk
-  const pBk = parseFloat(document.getElementById('pow-bk').value) || 0;
-  const wxBk = parseFloat(document.getElementById('wx-bk').value) || 1;
-  const wyBk = parseFloat(document.getElementById('wy-bk').value) || 1;
-  const obsadaBk = 10000 / (wxBk * wyBk);
-  const tsztBk = (pBk * obsadaBk) / 1000;
-  document.getElementById('tszt-bk').value = tsztBk.toFixed(2);
-  document.getElementById('tooltip-bk').setAttribute(
-    'data-tooltip', 
-    `Wzór: ${pBk.toFixed(2)} ha × [10 000 / (${wxBk} × ${wyBk})] = ${Math.round(tsztBk * 1000)} szt.`
-  );
-
-  // Bilans powierzchni
-  const sumaZred = pDb + pBk;
-  document.getElementById('suma-zred').innerText = sumaZred.toFixed(2);
-  document.getElementById('val-odn').innerText = sumaZred.toFixed(2);
-  document.getElementById('val-tszt').innerText = (tsztDb + tsztBk).toFixed(2);
-
-  // Walidacja rębni IIIA (gniazda max 40% powierzchni manipulacyjnej)
-  const statusEl = document.getElementById('status-walidacji');
-  if (rebnia === 'IIIA') {
-    const limitGniazd = pBrutto * 0.40;
-    if (sumaZred > limitGniazd) {
-      statusEl.innerText = `Ostrzeżenie: Gniazda (${sumaZred.toFixed(2)} ha) przekraczają 40% zrębu (${limitGniazd.toFixed(2)} ha)`;
-      statusEl.className = 'alert';
-    } else {
-      statusEl.innerText = 'Bilanse w normie rębni IIIA';
-      statusEl.className = 'ok';
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Prowizorium DSS</title>
+  <style>
+    :root {
+      --bg: #0b0f14; --surface: #141a23; --border: #263342;
+      --text: #e2e8f0; --text-muted: #8899a6;
+      --accent: #10b981; --blue: #38bdf8; --warning: #f59e0b; --danger: #ef4444;
     }
-  } else {
-    statusEl.innerText = 'Bilanse poprawne';
-    statusEl.className = 'ok';
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; width: 100%; max-width: 850px; margin-bottom: 50px; }
+    h2 { color: var(--accent); font-size: 1.1rem; margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+    label { display: flex; align-items: center; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px; }
+    
+    input[type="text"], input[type="number"], select { width: 100%; padding: 8px; background: #090c10; border: 1px solid var(--border); border-radius: 6px; color: var(--text); outline: none; box-sizing: border-box; }
+    input:focus, select:focus { border-color: var(--blue); }
+    
+    .silp-address { display: flex; align-items: center; gap: 2px; background: #090c10; padding: 4px; border: 1px solid var(--border); border-radius: 6px; width: fit-content; }
+    .silp-address input { width: 35px; padding: 4px; text-align: center; border: none; background: transparent; font-family: monospace; font-size: 0.85rem; }
+    .silp-address input:focus { background: var(--surface); border-radius: 4px; }
+    .silp-address input[readonly] { color: var(--text-muted); width: 25px; }
+    .silp-sep { color: var(--border); font-weight: bold; font-size: 0.85rem; }
+
+    .input-spin { display: flex; align-items: center; background: #090c10; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; width: 110px; transition: 0.2s; }
+    .input-spin:focus-within { border-color: var(--blue); }
+    .input-spin input { border: none; width: 100%; border-radius: 0; padding-right: 2px; text-align: left; }
+    .input-spin input:focus { box-shadow: none; }
+    .spin-btns { display: flex; flex-direction: column; width: 24px; background: var(--surface); border-left: 1px solid var(--border); }
+    .spin-btns button { background: transparent; border: none; color: var(--text-muted); font-size: 0.6rem; cursor: pointer; padding: 2px 0; height: 16px; display: flex; align-items: center; justify-content: center; }
+    .spin-btns button:hover { background: var(--border); color: var(--text); }
+    .spin-btns button:first-child { border-bottom: 1px solid var(--border); }
+
+    .section-title { font-size: 0.9rem; color: var(--blue); margin: 20px 0 10px 0; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); padding-bottom: 5px;}
+    .info { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: var(--text-muted); color: var(--bg); font-size: 10px; font-weight: bold; cursor: help; margin-left: 6px; }
+
+    .dynamic-row { display: flex; flex-direction: column; background: #090c10; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 8px; }
+    .row-header { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+    .row-header input[type="checkbox"] { width: auto; transform: scale(1.2); accent-color: var(--accent); }
+    
+    .slider-container { display: flex; align-items: center; gap: 15px; background: #0b0f14; padding: 10px; border-radius: 6px; border: 1px solid var(--border); margin-top: 10px; }
+    input[type="range"] { flex-grow: 1; accent-color: var(--accent); }
+    .lista-suwaka { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+
+    .result-box { background: #090c10; padding: 15px; border-radius: 6px; border: 1px solid var(--border); margin-top: 20px; }
+    .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; text-align: center; }
+    .res-wrapper { background: var(--surface); padding: 10px; border-radius: 6px; border: 1px dashed var(--border); position: relative; }
+    .res-val { font-size: 1.4rem; font-weight: bold; color: var(--accent); margin: 10px 0; }
+    
+    .copy-btn { background: var(--border); color: var(--text); border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; width: 100%; transition: 0.2s; }
+    .copy-btn:hover { background: var(--blue); color: #fff; }
+    
+    .szybki-wzor { background: #090c10; border: 1px dashed var(--accent); color: var(--text); padding: 8px; border-radius: 6px; margin-bottom: 10px; display: none; }
+    .szybki-wzor:focus { border: 1px solid var(--accent); }
+
+    #log-panel { position: fixed; bottom: 20px; right: 20px; width: 280px; background: rgba(20, 26, 35, 0.95); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 1000; overflow: hidden; backdrop-filter: blur(5px); }
+    #log-header { background: var(--border); padding: 8px 12px; font-size: 0.8rem; font-weight: bold; color: var(--text); text-transform: uppercase; letter-spacing: 0.05em; }
+    #log-content { max-height: 200px; overflow-y: auto; padding: 10px; font-size: 0.75rem; color: var(--text-muted); }
+    .log-item { border-bottom: 1px solid rgba(255,255,255,0.05); padding: 4px 0; }
+    .log-time { color: var(--accent); margin-right: 5px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <!-- MODUŁ 1 -->
+  <h2>1. Identyfikacja Cięcia</h2>
+  
+  <div style="margin-bottom: 15px;">
+    <label>Adres leśny <span class="info" title="Standardowy adres SILP.">i</span></label>
+    <div class="silp-address">
+      <input type="text" value="11" readonly> <span class="silp-sep">-</span>
+      <input type="text" value="27" readonly> <span class="silp-sep">-</span>
+      <input type="text" placeholder="1" maxlength="1"> <span class="silp-sep">-</span>
+      <input type="text" placeholder="04" maxlength="2"> <span class="silp-sep">-</span>
+      <input type="text" placeholder="331" maxlength="4" style="width:45px;"> <span class="silp-sep">-</span>
+      <input type="text" placeholder="h" maxlength="2"> <span class="silp-sep">-</span>
+      <input type="text" placeholder="00" maxlength="2">
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <label>Typ rębni</label>
+      <select id="rebnia" onchange="oblicz()">
+        <optgroup label="Zupełne (I)">
+          <option value="ZU">IA (Zupełna wielkopowierzchniowa)</option>
+          <option value="ZU">IB (Zupełna pasowa)</option>
+          <option value="ZU">IC (Zupełna smugowa)</option>
+        </optgroup>
+        <optgroup label="Częściowe (II)">
+          <option value="CZ">IIA (Częściowa wielkopow.)</option>
+          <option value="CZ">IIB (Częściowa pasowa)</option>
+        </optgroup>
+        <optgroup label="Gniazdowe (III)">
+          <option value="GNIA">IIIA (Gniazdowa zupełna)</option>
+          <option value="UPRZ">IIIAU (Uprzątająca)</option>
+        </optgroup>
+      </select>
+    </div>
+    <div>
+      <label>Pow. manipulacyjna brutto [ha]</label>
+      <div class="input-spin">
+        <input type="text" id="pow-manp" class="ha-input" placeholder="0.00" oninput="formatuj(this); oblicz()">
+        <div class="spin-btns">
+          <button onclick="spinVal('pow-manp', 0.1)">▲</button>
+          <button onclick="spinVal('pow-manp', -0.1)">▼</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">PNSW</div>
+  
+  <div class="dynamic-row">
+    <div class="row-header">
+      <div style="display:flex; align-items:center;">
+        <input type="checkbox" id="kepa-auto" checked onchange="oblicz()">
+        <label style="margin:0 0 0 6px; color:var(--text); font-size:0.9rem;">Kępa ekologiczna (5%)</label>
+      </div>
+      <div class="input-spin" id="kepa-wrap" style="opacity: 0.7; pointer-events: none;">
+        <input type="text" id="pow-kepa" class="ha-input" placeholder="0.00" readonly oninput="formatuj(this); oblicz()">
+        <div class="spin-btns">
+          <button onclick="spinVal('pow-kepa', 0.1)">▲</button>
+          <button onclick="spinVal('pow-kepa', -0.1)">▼</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dynamic-row">
+    <div class="row-header">
+      <div style="display:flex; align-items:center;">
+        <input type="checkbox" id="chk-ekoton" onchange="oblicz()">
+        <label style="margin:0 0 0 6px; color:var(--text); font-size:0.9rem;">Ekotony / Bufory</label>
+      </div>
+      <div class="input-spin" id="wrap-ekoton" style="display:none;">
+        <input type="text" id="pow-ekoton" class="ha-input" placeholder="0.00" oninput="formatuj(this); oblicz()">
+        <div class="spin-btns">
+          <button onclick="spinVal('pow-ekoton', 0.1)">▲</button>
+          <button onclick="spinVal('pow-ekoton', -0.1)">▼</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dynamic-row">
+    <div class="row-header">
+      <div style="display:flex; align-items:center;">
+        <input type="checkbox" id="chk-luki" onchange="oblicz()">
+        <label style="margin:0 0 0 6px; color:var(--text); font-size:0.9rem;">Luki</label>
+      </div>
+    </div>
+    <div id="sekcja-luki" style="display:none;">
+      <div class="slider-container">
+        <input type="range" id="luki-suwak" min="1" max="10" value="1" oninput="generujPola('luki')">
+        <span id="luki-licznik" style="font-weight:bold; color:var(--accent); min-width:30px;">1</span>
+      </div>
+      <div id="luki-list" class="lista-suwaka"></div>
+    </div>
+  </div>
+
+  <div class="dynamic-row">
+    <div class="row-header">
+      <div style="display:flex; align-items:center;">
+        <input type="checkbox" id="chk-inne" onchange="oblicz()">
+        <label style="margin:0 0 0 6px; color:var(--text); font-size:0.9rem;">Inne</label>
+      </div>
+    </div>
+    <div id="sekcja-inne" style="display:none;">
+      <div class="slider-container">
+        <input type="range" id="inne-suwak" min="1" max="10" value="1" oninput="generujPola('inne')">
+        <span id="inne-licznik" style="font-weight:bold; color:var(--accent); min-width:30px;">1</span>
+      </div>
+      <div id="inne-list" class="lista-suwaka"></div>
+    </div>
+  </div>
+
+  <div class="dynamic-row" id="wiersz-stare-gniazda" style="display:none;">
+    <div class="row-header">
+      <div style="display:flex; align-items:center;">
+        <input type="checkbox" id="chk-stare" onchange="oblicz()">
+        <label style="margin:0 0 0 6px; color:var(--text); font-size:0.9rem;">Gniazda już odnowione</label>
+      </div>
+      <div class="input-spin" id="wrap-stare" style="display:none;">
+        <input type="text" id="pow-stare" class="ha-input" placeholder="0.00" oninput="formatuj(this); oblicz()">
+        <div class="spin-btns">
+          <button onclick="spinVal('pow-stare', 0.1)">▲</button>
+          <button onclick="spinVal('pow-stare', -0.1)">▼</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="sekcja-gniazd" style="display:none; margin-top:15px; background: #090c10; padding: 12px; border: 1px solid var(--border); border-radius: 6px;">
+    <label style="color:var(--accent); margin-bottom:0;">Liczba gniazd</label>
+    <div class="slider-container">
+      <input type="range" id="gniazda-suwak" min="1" max="15" value="1" oninput="generujPola('gniazda')">
+      <span id="gniazda-licznik" style="font-weight:bold; color:var(--accent); min-width:30px;">1</span>
+    </div>
+    <div id="gniazda-list" class="lista-suwaka"></div>
+  </div>
+
+  <div class="result-box">
+    <div class="result-grid">
+      <div class="res-wrapper">
+        <label>Powierzchnia manipulacyjna (ha)</label>
+        <div class="res-val" id="res-manp">0.00</div>
+        <button class="copy-btn" onclick="kopiuj('res-manp', 'Pow. manipulacyjna')">Kopiuj</button>
+      </div>
+      <div class="res-wrapper">
+        <label>Powierzchnia do odnowienia (ha)</label>
+        <div class="res-val" id="res-odnp">0.00</div>
+        <button class="copy-btn" onclick="kopiuj('res-odnp', 'Pow. do odnowienia')">Kopiuj</button>
+      </div>
+      <div class="res-wrapper">
+        <label>Pow. zredukowana do odnowienia (ha)</label>
+        <div class="res-val" id="res-odzp">0.00</div>
+        <button class="copy-btn" onclick="kopiuj('res-odzp', 'Pow. zredukowana')">Kopiuj</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODUŁ 2 -->
+  <h2 style="margin-top: 35px;">2. Zapotrzebowanie na sadzonki (ZHL)</h2>
+  
+  <div style="margin-bottom: 15px; display: flex; gap: 15px; align-items: center;">
+    <input type="checkbox" id="chk-siedlisko" onchange="if(this.checked) loguj('Siedlisko przyrodnicze: preferuj odnowienie naturalne i rodzime gatunki wg PZO!');" style="transform: scale(1.2); accent-color: var(--accent);">
+    <label for="chk-siedlisko" style="margin:0; color:var(--warning); font-weight:bold;">Natura 2000 / Siedlisko przyrodnicze</label>
+  </div>
+
+  <div class="grid" style="grid-template-columns: 1fr 1fr auto;">
+    <div>
+      <label>Siedlisko (TSL)</label>
+      <select id="tsl-select" onchange="aktualizujTD()"></select>
+    </div>
+    <div>
+      <label>Typ Drzewostanu (TD)</label>
+      <select id="td-select"></select>
+    </div>
+    <div style="display: flex; align-items: flex-end;">
+      <button class="copy-btn" style="height: 38px; padding: 0 15px; font-weight: bold; border: 1px solid var(--accent); color: var(--accent); background: rgba(16,185,129,0.1);" onclick="generujSkladZHL()">Generuj z ZHL</button>
+    </div>
+  </div>
+
+  <!-- Wybór gniazda (tylko w rębni IIIA) -->
+  <div id="kontener-wyboru-gniazda" style="display: none; background: #090c10; border: 1px dashed var(--border); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+    <label style="color:var(--blue);">Wybierz obiekt do obsadzenia:</label>
+    <select id="gniazdo-obszar-select" onchange="przeliczSadzonki()">
+      <option value="all">Całość zredukowana (ODZP)</option>
+    </select>
+  </div>
+
+  <div class="section-title">Struktura odnowienia 
+    <button id="btn-edytuj" onclick="odblokujEdycje()" style="float: right; background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; cursor: pointer;">✏️ Edytuj skład</button>
+  </div>
+  
+  <input type="text" id="szybki-wzor" class="szybki-wzor" placeholder="Szybki wpis udziału z klawiatury (np. 5So 3Db.s 2Brz)" oninput="parsujSzybkiWzor(this.value)">
+
+  <div style="background: #090c10; border: 1px solid var(--border); border-radius: 6px; padding: 10px;">
+    <div style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 2fr 1.5fr 30px; gap: 10px; font-size: 0.7rem; color: var(--text-muted); margin-bottom: 8px; text-align: center; font-weight: bold;">
+      <div style="text-align: left;">Gatunek</div>
+      <div>Udział (1-10)</div>
+      <div>Pow. [ha]</div>
+      <div>Więźba [m]</div>
+      <div>Sztuki [tszt]</div>
+      <div></div>
+    </div>
+    
+    <div id="sklad-lista"></div>
+
+    <button id="btn-dodaj-gatunek" onclick="dodajWierszGatunku('So', 0, '1.50', '0.70')" style="display: none; width: 100%; margin-top: 10px; background: var(--surface); border: 1px dashed var(--border); color: var(--text-muted); padding: 6px; border-radius: 4px; cursor: pointer;">+ Dodaj gatunek</button>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.85rem;">
+      <div id="bilans-pow" style="color: var(--warning);">Zgodność: 0.00 / 0.00 ha (0%)</div>
+      
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="chk-peczki" onchange="przeliczSadzonki()" style="accent-color: var(--accent);">
+        <label for="chk-peczki" style="margin:0; font-size:0.75rem; color:var(--text-muted);">Pęczki (50 szt.)</label>
+        
+        <div style="font-weight: bold; margin-left:15px;">Suma: <span id="suma-tszt" style="color: var(--accent); font-size: 1.1rem;">0.00</span> tszt</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Logi -->
+<div id="log-panel">
+  <div id="log-header">Operacje</div>
+  <div id="log-content">
+    <div class="log-item"><span class="log-time">[System]</span> Gotowy do kalkulacji.</div>
+  </div>
+</div>
+
+<script>
+  /* ====================== MODUŁ 1: OBLICZENIA ====================== */
+  function formatuj(input) {
+    let val = input.value.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+    if (!val.includes('.') && val.length >= 2) val = val.substring(0, 1) + '.' + val.substring(1);
+    let parts = val.split('.');
+    if(parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+    if(parts[0].length > 1) { parts[0] = parts[0].substring(0, 1); val = parts.join('.'); }
+    input.value = val;
   }
 
-  // Powierzchnia do grodzenia
-  let powGrodz = 0;
-  if (document.getElementById('grodz-db').checked) powGrodz += pDb;
-  if (document.getElementById('grodz-bk').checked) powGrodz += pBk;
-  document.getElementById('val-grodz').innerText = powGrodz.toFixed(2);
-}
+  function formatujWiezbe(input) {
+    let val = parseFloat(input.value) || 0;
+    input.value = val.toFixed(2);
+  }
 
-function copyValue(btn, targetId) {
-  const text = document.getElementById(targetId).innerText;
-  navigator.clipboard.writeText(text).then(() => {
-    const originalText = btn.innerHTML;
-    btn.innerHTML = 'Skopiowano!';
-    btn.classList.add('copied');
-    setTimeout(() => {
-      btn.innerHTML = originalText;
-      btn.classList.remove('copied');
-    }, 1000);
-  });
-}
+  function spinVal(id, delta) {
+    const input = document.getElementById(id);
+    if(!input || input.readOnly) return;
+    let val = parseFloat(input.value) || 0;
+    val += delta;
+    if(val < 0) val = 0;
+    if(val > 9.99) val = 9.99;
+    input.value = val.toFixed(2);
+    oblicz();
+  }
 
-// Uruchomienie na start
-calcAll();
+  document.addEventListener('wheel', function(e) {
+    if(e.target.classList.contains('ha-input') && !e.target.readOnly) {
+      e.preventDefault();
+      let val = parseFloat(e.target.value) || 0;
+      val += (e.deltaY < 0 ? 0.1 : -0.1);
+      if(val < 0) val = 0;
+      if(val > 9.99) val = 9.99;
+      e.target.value = val.toFixed(2);
+      oblicz();
+    }
+  }, {passive: false});
+
+  function loguj(msg) {
+    const content = document.getElementById('log-content');
+    const time = new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute:'2-digit', second:'2-digit' });
+    content.insertAdjacentHTML('afterbegin', `<div class="log-item"><span class="log-time">[${time}]</span> ${msg}</div>`);
+  }
+
+  function kopiuj(id, nazwa) {
+    const text = document.getElementById(id).innerText;
+    navigator.clipboard.writeText(text).then(() => loguj(`Skopiowano: <b>${nazwa}</b> (${text} ha)`));
+  }
+
+  function generujPola(typ) {
+    const count = parseInt(document.getElementById(`${typ}-suwak`).value);
+    document.getElementById(`${typ}-licznik`).innerText = count;
+    const list = document.getElementById(`${typ}-list`);
+    
+    let stareWartosci = [];
+    document.querySelectorAll(`.${typ}-input`).forEach(inp => stareWartosci.push(inp.value));
+
+    list.innerHTML = '';
+    for(let i = 1; i <= count; i++) {
+      let val = stareWartosci[i-1] || '';
+      let nazwa = typ === 'gniazda' ? 'Gniazdo' : (typ === 'luki' ? 'Luka' : 'Inne');
+      let elementId = `${typ}-${i}`;
+      
+      list.innerHTML += `
+        <div>
+          <label style="font-size:0.75rem;">${nazwa} ${i}</label>
+          <div class="input-spin">
+            <input type="text" id="${elementId}" class="ha-input ${typ}-input" value="${val}" placeholder="0.00" oninput="formatuj(this); oblicz()">
+            <div class="spin-btns">
+              <button onclick="spinVal('${elementId}', 0.1)">▲</button>
+              <button onclick="spinVal('${elementId}', -0.1)">▼</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    oblicz();
+  }
+
+  function oblicz() {
+    const rebnia = document.getElementById('rebnia').value;
+    const manp = parseFloat(document.getElementById('pow-manp').value) || 0;
+    
+    const kepaAuto = document.getElementById('kepa-auto').checked;
+    const poleKepa = document.getElementById('pow-kepa');
+    const kepaWrap = document.getElementById('kepa-wrap');
+    if (kepaAuto) {
+      poleKepa.value = manp > 0 ? (manp * 0.05).toFixed(2) : '';
+      poleKepa.readOnly = true;
+      kepaWrap.style.opacity = "0.7"; kepaWrap.style.pointerEvents = "none";
+    } else {
+      poleKepa.readOnly = false;
+      kepaWrap.style.opacity = "1"; kepaWrap.style.pointerEvents = "auto";
+    }
+
+    document.getElementById('wrap-ekoton').style.display = document.getElementById('chk-ekoton').checked ? 'flex' : 'none';
+    document.getElementById('sekcja-luki').style.display = document.getElementById('chk-luki').checked ? 'block' : 'none';
+    document.getElementById('sekcja-inne').style.display = document.getElementById('chk-inne').checked ? 'block' : 'none';
+    document.getElementById('wrap-stare').style.display = document.getElementById('chk-stare').checked ? 'flex' : 'none';
+    document.getElementById('sekcja-gniazd').style.display = (rebnia === 'GNIA') ? 'block' : 'none';
+    document.getElementById('wiersz-stare-gniazda').style.display = (rebnia === 'UPRZ') ? 'flex' : 'none';
+
+    const kepa = parseFloat(document.getElementById('pow-kepa').value) || 0;
+    const ekoton = document.getElementById('chk-ekoton').checked ? (parseFloat(document.getElementById('pow-ekoton').value) || 0) : 0;
+    const stare = document.getElementById('chk-stare').checked ? (parseFloat(document.getElementById('pow-stare').value) || 0) : 0;
+    
+    let powLuki = 0; if (document.getElementById('chk-luki').checked) document.querySelectorAll('.luki-input').forEach(inp => powLuki += parseFloat(inp.value) || 0);
+    let powInne = 0; if (document.getElementById('chk-inne').checked) document.querySelectorAll('.inne-input').forEach(inp => powInne += parseFloat(inp.value) || 0);
+
+    const sumaWylaczen = kepa + ekoton + powLuki + powInne;
+
+    let sumaGniazd = 0;
+    if (rebnia === 'GNIA') document.querySelectorAll('.gniazda-input').forEach(inp => sumaGniazd += parseFloat(inp.value) || 0);
+
+    let odnp = 0; let odzp = 0;
+
+    if (rebnia === 'ZU' || rebnia === 'CZ') { odnp = manp; odzp = Math.max(0, manp - sumaWylaczen); } 
+    else if (rebnia === 'GNIA') { odnp = sumaGniazd; odzp = Math.max(0, sumaGniazd - sumaWylaczen); } 
+    else if (rebnia === 'UPRZ') { odnp = Math.max(0, manp - stare); odzp = Math.max(0, odnp - sumaWylaczen); }
+
+    document.getElementById('res-manp').innerText = manp.toFixed(2);
+    document.getElementById('res-odnp').innerText = odnp.toFixed(2);
+    document.getElementById('res-odzp').innerText = odzp.toFixed(2);
+
+    // Aktualizacja listy gniazd w module 2
+    aktualizujListeGniazdDlaModulu2(rebnia);
+
+    if(typeof przeliczSadzonki === 'function') przeliczSadzonki();
+  }
+
+  /* ====================== MODUŁ 2: ZHL ====================== */
+  
+  const zhlData = {
+    'Bśw': { 'So': [{gat: 'So', proc: 9, w1: '1.50', w2: '0.70'}, {gat: 'Brz', proc: 1, w1: '1.50', w2: '1.20'}] },
+    'BMśw': {
+      'So-Db': [{gat: 'So', proc: 7, w1: '1.50', w2: '0.70'}, {gat: 'Db.s', proc: 2, w1: '1.50', w2: '0.80'}, {gat: 'Brz', proc: 1, w1: '1.50', w2: '1.20'}],
+      'So': [{gat: 'So', proc: 8, w1: '1.50', w2: '0.70'}, {gat: 'Db.s', proc: 2, w1: '1.50', w2: '0.80'}]
+    },
+    'LMśw': {
+      'Db-So': [{gat: 'Db.s', proc: 5, w1: '1.50', w2: '0.80'}, {gat: 'So', proc: 3, w1: '1.50', w2: '0.70'}, {gat: 'Bk', proc: 2, w1: '1.50', w2: '0.80'}],
+      'So-Db': [{gat: 'So', proc: 5, w1: '1.50', w2: '0.70'}, {gat: 'Db.s', proc: 4, w1: '1.50', w2: '0.80'}, {gat: 'Md', proc: 1, w1: '1.50', w2: '1.50'}]
+    },
+    'Lśw': {
+      'Db': [{gat: 'Db.s', proc: 6, w1: '1.50', w2: '0.80'}, {gat: 'Bk', proc: 3, w1: '1.50', w2: '0.80'}, {gat: 'Lp', proc: 1, w1: '1.50', w2: '1.20'}]
+    }
+  };
+
+  const listaSkrotowLP = ['So', 'Db.s', 'Db.b', 'Bk', 'Brz', 'Św', 'Jd', 'Md', 'Ol', 'Kl', 'Jaw', 'Lp', 'Wz', 'Gb', 'Js', 'Os'];
+  
+  function domyslnaWiezba(gat) {
+    if(gat === 'So') return {w1: '1.50', w2: '0.70'};
+    if(gat.includes('Db') || gat === 'Bk') return {w1: '1.50', w2: '0.80'};
+    if(gat === 'Św' || gat === 'Jd') return {w1: '1.50', w2: '1.00'};
+    if(gat === 'Md') return {w1: '1.50', w2: '1.50'};
+    return {w1: '1.50', w2: '1.20'}; // Reszta liściastych/domieszek
+  }
+
+  let trybEdycjiSkladu = false;
+
+  function aktualizujListeGniazdDlaModulu2(rebnia) {
+    const select = document.getElementById('gniazdo-obszar-select');
+    const kontener = document.getElementById('kontener-wyboru-gniazda');
+    const staryWybór = select.value;
+    
+    select.innerHTML = '<option value="all">Całość zredukowana (ODZP)</option>';
+    
+    if(rebnia === 'GNIA') {
+      kontener.style.display = 'block';
+      let idx = 1;
+      document.querySelectorAll('.gniazda-input').forEach(inp => {
+        let v = parseFloat(inp.value) || 0;
+        select.add(new Option(`Gniazdo ${idx} (${v.toFixed(2)} ha)`, v));
+        idx++;
+      });
+      // Spróbuj przywrócić poprzedni wybór
+      let u = Array.from(select.options).find(opt => opt.value === staryWybór);
+      if(u) select.value = staryWybór;
+    } else {
+      kontener.style.display = 'none';
+      select.value = 'all';
+    }
+  }
+
+  function getDocelowaPowierzchnia() {
+    const wybranyObszar = document.getElementById('gniazdo-obszar-select').value;
+    if(wybranyObszar === 'all') return parseFloat(document.getElementById('res-odzp').innerText) || 0;
+    return parseFloat(wybranyObszar) || 0; // Jeśli wybrano konkretne gniazdo
+  }
+
+  function inicjalizujZHL() {
+    const tslSelect = document.getElementById('tsl-select');
+    for (const tsl in zhlData) tslSelect.add(new Option(tsl, tsl));
+    aktualizujTD();
+  }
+
+  function aktualizujTD() {
+    const tsl = document.getElementById('tsl-select').value;
+    const tdSelect = document.getElementById('td-select');
+    tdSelect.innerHTML = '';
+    for (const td in zhlData[tsl]) tdSelect.add(new Option(td, td));
+  }
+
+  function generujSkladZHL() {
+    const tsl = document.getElementById('tsl-select').value;
+    const td = document.getElementById('td-select').value;
+    const powDocelowa = getDocelowaPowierzchnia();
+    
+    if(powDocelowa <= 0) { loguj('Brak hektarów pod obsadzenie.'); return; }
+
+    trybEdycjiSkladu = false;
+    document.getElementById('btn-dodaj-gatunek').style.display = 'none';
+    document.getElementById('szybki-wzor').style.display = 'none';
+    document.getElementById('szybki-wzor').value = '';
+    const lista = document.getElementById('sklad-lista');
+    lista.innerHTML = '';
+
+    const sklad = zhlData[tsl][td];
+    sklad.forEach(pozycja => dodajWierszGatunku(pozycja.gat, pozycja.proc, pozycja.w1, pozycja.w2));
+    
+    przeliczSadzonki();
+    loguj(`Skład ZHL: ${tsl} (${td})`);
+  }
+
+  function dodajWierszGatunku(gatunek, udzial, w1, w2) {
+    const lista = document.getElementById('sklad-lista');
+    const id = Date.now() + Math.floor(Math.random() * 100);
+    const stan = trybEdycjiSkladu ? '' : 'disabled';
+    
+    // Budowanie opcji do selecta
+    let opcje = listaSkrotowLP.map(g => `<option value="${g}" ${g === gatunek ? 'selected' : ''}>${g}</option>`).join('');
+
+    const html = `
+      <div id="wiersz-${id}" class="sklad-wiersz" style="display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 2fr 1.5fr 30px; gap: 10px; margin-bottom: 6px; align-items: center;">
+        <select class="g-nazwa" ${stan} onchange="autoWiezba(this); przeliczSadzonki()" style="text-align: center; padding: 4px;">
+          ${opcje}
+        </select>
+        <input type="number" class="g-proc" value="${udzial}" ${trybEdycjiSkladu?'':'readonly'} oninput="syncPowZProc(this); przeliczSadzonki()" style="text-align: center; padding:4px;" step="1">
+        <input type="number" class="g-ha" value="0.00" ${trybEdycjiSkladu?'':'readonly'} step="0.01" oninput="syncProcZPow(this); przeliczSadzonki()" style="text-align: center; padding:4px; border-color: var(--blue);">
+        <div style="display: flex; gap: 2px;">
+          <input type="number" class="g-w1" value="${w1}" step="0.01" ${trybEdycjiSkladu?'':'readonly'} onchange="formatujWiezbe(this); przeliczSadzonki()" style="text-align: center; padding: 4px;">
+          <span style="color: var(--text-muted); align-self: center;">x</span>
+          <input type="number" class="g-w2" value="${w2}" step="0.01" ${trybEdycjiSkladu?'':'readonly'} onchange="formatujWiezbe(this); przeliczSadzonki()" style="text-align: center; padding: 4px;">
+        </div>
+        <div class="g-tszt" style="text-align: center; font-weight: bold; color: var(--accent); align-self: center;">0.00</div>
+        <button onclick="usunWiersz('wiersz-${id}')" style="background:transparent; border:none; color:var(--danger); cursor:pointer; display:${trybEdycjiSkladu ? 'block' : 'none'};">✕</button>
+      </div>
+    `;
+    lista.insertAdjacentHTML('beforeend', html);
+  }
+
+  function autoWiezba(selectElement) {
+    if(!trybEdycjiSkladu) return;
+    const gat = selectElement.value;
+    const wiersz = selectElement.closest('.sklad-wiersz');
+    const wiezba = domyslnaWiezba(gat);
+    wiersz.querySelector('.g-w1').value = wiezba.w1;
+    wiersz.querySelector('.g-w2').value = wiezba.w2;
+  }
+
+  function odblokujEdycje() {
+    trybEdycjiSkladu = true;
+    document.getElementById('btn-dodaj-gatunek').style.display = 'block';
+    document.getElementById('szybki-wzor').style.display = 'block';
+    
+    document.getElementById('sklad-lista').querySelectorAll('input').forEach(inp => inp.removeAttribute('readonly'));
+    document.getElementById('sklad-lista').querySelectorAll('select').forEach(sel => sel.removeAttribute('disabled'));
+    document.getElementById('sklad-lista').querySelectorAll('button').forEach(btn => btn.style.display = 'block');
+    loguj('Odblokowano ręczną edycję składu.');
+  }
+
+  function usunWiersz(id) { document.getElementById(id).remove(); przeliczSadzonki(); }
+
+  function syncPowZProc(input) {
+    const powDocelowa = getDocelowaPowierzchnia();
+    const wiersz = input.closest('.sklad-wiersz');
+    const udzial = parseFloat(input.value) || 0; // z 10
+    wiersz.querySelector('.g-ha').value = ((udzial / 10) * powDocelowa).toFixed(2);
+  }
+
+  function syncProcZPow(input) {
+    const powDocelowa = getDocelowaPowierzchnia();
+    const wiersz = input.closest('.sklad-wiersz');
+    const pow = parseFloat(input.value) || 0;
+    if(powDocelowa > 0) wiersz.querySelector('.g-proc').value = Math.round((pow / powDocelowa) * 10);
+  }
+
+  // Szybki parser wpisu np "5So 3Db 2Brz"
+  function parsujSzybkiWzor(tekst) {
+    if(!tekst) return;
+    const regex = /(\d+)\s*([a-zA-Ząćęłńóśźż\.]+)/gi;
+    let match;
+    let znaleziono = [];
+    
+    while ((match = regex.exec(tekst)) !== null) {
+      let udzial = parseInt(match[1]);
+      let gat = match[2];
+      // Podciągamy pisownię
+      gat = gat.charAt(0).toUpperCase() + gat.slice(1).toLowerCase();
+      if(gat === 'Dbs' || gat === 'Db') gat = 'Db.s';
+      znaleziono.push({udzial, gat});
+    }
+
+    if(znaleziono.length > 0) {
+      document.getElementById('sklad-lista').innerHTML = '';
+      znaleziono.forEach(z => {
+        const wiezba = domyslnaWiezba(z.gat);
+        dodajWierszGatunku(z.gat, z.udzial, wiezba.w1, wiezba.w2);
+      });
+      przeliczSadzonki();
+    }
+  }
+
+  function przeliczSadzonki() {
+    const powDocelowa = getDocelowaPowierzchnia();
+    const peczki = document.getElementById('chk-peczki').checked;
+    const wiersze = document.querySelectorAll('.sklad-wiersz');
+    let sumaHa = 0; let sumaTszt = 0;
+
+    wiersze.forEach(w => {
+      if(!trybEdycjiSkladu && powDocelowa > 0) {
+        const udzial = parseFloat(w.querySelector('.g-proc').value) || 0;
+        w.querySelector('.g-ha').value = ((udzial / 10) * powDocelowa).toFixed(2);
+      }
+      
+      const pow = parseFloat(w.querySelector('.g-ha').value) || 0;
+      const w1 = parseFloat(w.querySelector('.g-w1').value) || 1;
+      const w2 = parseFloat(w.querySelector('.g-w2').value) || 1;
+      
+      sumaHa += pow;
+      
+      let tszt = 0;
+      if (w1 > 0 && w2 > 0) {
+        let sztuki = (pow * 10000) / (w1 * w2);
+        if (peczki) {
+           sztuki = Math.ceil(sztuki / 50) * 50; // Zaokrąglanie w górę do pełnych pęczków
+        }
+        tszt = sztuki / 1000;
+      }
+      
+      w.querySelector('.g-tszt').innerText = tszt.toFixed(2);
+      sumaTszt += tszt;
+    });
+
+    document.getElementById('suma-tszt').innerText = sumaTszt.toFixed(2);
+    
+    const bilans = document.getElementById('bilans-pow');
+    const procentSuma = powDocelowa > 0 ? (sumaHa / powDocelowa * 100).toFixed(0) : 0;
+    bilans.innerText = `Zgodność: ${sumaHa.toFixed(2)} / ${powDocelowa.toFixed(2)} ha (${procentSuma}%)`;
+    bilans.style.color = (sumaHa.toFixed(2) === powDocelowa.toFixed(2) && powDocelowa > 0) ? 'var(--accent)' : 'var(--warning)';
+  }
+
+  // Start
+  generujPola('luki'); generujPola('inne'); generujPola('gniazda');
+  inicjalizujZHL();
+  oblicz();
+</script>
+
+</body>
+</html>
